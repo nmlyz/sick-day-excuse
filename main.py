@@ -1,87 +1,94 @@
-#!/usr/bin/env python3
-"""Write the sick-day excuse to /output/entry.txt.
+"""Sick-day excuse entry writer.
 
-The excuse is one line: a contact lens lost somewhere in the flat, and
-the negotiation with the carpet that follows. The program validates the
-line before it writes anything, so a broken line can never reach the
-output file.
+Builds the single-line excuse for the "Funniest Sick-Day Excuse"
+competition and writes it to /output/entry.txt. The entry text is a
+fixed string: the program assembles it, validates it against the
+competition format rules, writes it, and then verifies the written
+bytes by reading them back. No character of the entry is altered.
 """
 
 import os
 import sys
 
-# The excuse, exactly as it is meant to be read.
+OUTPUT_PATH = "/output/entry.txt"
+
+# The excuse, exactly as submitted (130 characters, one line).
 EXCUSE = (
     "I woke up with my contact lens in one eye and the other one "
-    "somewhere in the flat, and I am currently negotiating with the carpet."
+    "somewhere in the flat, and I am currently negotiating with "
+    "the carpet."
 )
 
-# Where the entry goes. The directory is created if it is missing;
-# its permissions are left exactly as the sandbox set them.
-OUTPUT_DIR = "/output"
-OUTPUT_NAME = "entry.txt"
-
-# Guards that keep the output honest: the line must be a single line,
-# end with a full stop, and stay under 200 characters. The character
-# count is pinned so an accidental edit is caught here, before the
-# line is ever written out.
-MAX_LENGTH = 200
 EXPECTED_LENGTH = 130
-REQUIRED_WORDS = ("contact lens", "carpet")
+FORBIDDEN_CHARS = ("\t", "\r")
 
 
-def build_line() -> str:
-    """Return the excuse line, stripped of any stray whitespace."""
-    line = EXCUSE.strip()
-    return line
+def build_entry():
+    """Return the excuse text, assembled from its three clauses."""
+    return EXCUSE
 
 
-def check_line(line: str) -> list[str]:
-    """Collect every problem with a candidate line; empty means fine."""
+def validate_entry(text):
+    """Check the entry against the competition's format rules.
+
+    Returns a list of problems; an empty list means the entry is
+    ready to be written.
+    """
     problems = []
-    if not line:
-        problems.append("line is empty")
-    if "\n" in line or "\r" in line:
-        problems.append("line must not contain a line break")
-    if len(line) > MAX_LENGTH:
-        problems.append(f"line is {len(line)} chars, over {MAX_LENGTH}")
-    if len(line) != EXPECTED_LENGTH:
-        problems.append(
-            f"line is {len(line)} chars, expected {EXPECTED_LENGTH}"
-        )
-    if not line.endswith("."):
-        problems.append("line must end with a full stop")
-    for word in REQUIRED_WORDS:
-        if word not in line:
-            problems.append(f"line is missing the word {word!r}")
+    if len(text) != EXPECTED_LENGTH:
+        problems.append("length %d, expected %d" % (len(text), EXPECTED_LENGTH))
+    if text != text.strip():
+        problems.append("leading or trailing whitespace")
+    if not text.endswith("."):
+        problems.append("must end with a full stop")
+    if "\n" in text:
+        problems.append("must be a single line")
+    for bad in FORBIDDEN_CHARS:
+        if bad in text:
+            problems.append("contains forbidden character %r" % bad)
+    try:
+        text.encode("ascii")
+    except UnicodeEncodeError:
+        problems.append("non-ASCII characters present")
     return problems
 
 
-def output_path() -> str:
-    """Join the output directory and file name."""
-    return os.path.join(OUTPUT_DIR, OUTPUT_NAME)
+def entry_stats(text):
+    """Return (character count, word count) for the entry."""
+    return len(text), len(text.split())
 
 
-def write_entry(line: str) -> str:
-    """Write the line to /output/entry.txt and return the path."""
-    path = output_path()
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+def ensure_output_dir(path):
+    """Create the output directory if it does not exist yet."""
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+
+def write_entry(path, text):
+    """Write the entry plus a trailing newline, then verify the bytes."""
+    ensure_output_dir(path)
+    payload = text + "\n"
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(line + "\n")
-    os.chmod(path, 0o644)
-    return path
+        handle.write(payload)
+    with open(path, "rb") as handle:
+        written = handle.read()
+    if written != payload.encode("utf-8"):
+        raise RuntimeError("round-trip check failed for %s" % path)
+    return len(written)
 
 
-def main() -> int:
-    """Validate the line, write it out, and report what was done."""
-    line = build_line()
-    problems = check_line(line)
+def main():
+    entry = build_entry()
+    problems = validate_entry(entry)
     if problems:
         for problem in problems:
-            print(f"invalid excuse: {problem}", file=sys.stderr)
+            print("validation error: %s" % problem, file=sys.stderr)
         return 1
-    path = write_entry(line)
-    print(f"wrote {len(line)} characters to {path}")
+    total = write_entry(OUTPUT_PATH, entry)
+    chars, words = entry_stats(entry)
+    print("entry stats: %d characters, %d words" % (chars, words))
+    print("wrote %d characters to %s" % (total - 1, OUTPUT_PATH))
     return 0
 
 

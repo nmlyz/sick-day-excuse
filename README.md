@@ -17,18 +17,21 @@ Running `main.py` writes a single line to `/output/entry.txt`:
 > I woke up with my contact lens in one eye and the other one somewhere in the flat, and I am currently negotiating with the carpet.
 
 Before writing anything, the program checks the line: it must be one
-line, end with a full stop, stay under 200 characters, be exactly 130
-characters long, and contain the words `contact lens` and `carpet`. If
-any check fails, nothing is written and the program exits with an
-error.
+line, end with a full stop, be exactly 130 characters long, contain
+only printable ASCII, and contain no tabs or carriage returns. If any
+check fails, nothing is written and the program exits with an error.
+After writing, it reads the file back and compares the bytes, so a
+half-written file is caught immediately instead of slipping through.
 
 ## How it works
 
-`main.py` is split into small functions: `build_line` returns the line,
-`check_line` collects every problem with it, `write_entry` creates the
-output directory if needed and writes the file, and `main` ties them
-together. Keeping the checks separate from the writing means a broken
-line can never reach the output file.
+`main.py` is split into small functions: `build_entry` returns the
+line, `validate_entry` collects every problem with it, `entry_stats`
+reports its character and word counts, `write_entry` creates the
+output directory if needed, writes the file and verifies the bytes by
+reading them back, and `main` ties them together. Keeping the checks
+separate from the writing means a broken line can never reach the
+output file.
 
 ## Usage
 
@@ -38,8 +41,9 @@ cat /output/entry.txt
 ```
 
 The program uses only the Python standard library, so there is nothing
-to install. The output file is written with mode `0644` and the result
-is byte-identical on every run.
+to install. The output is deterministic: running it twice produces a
+byte-identical file, and the program prints the entry's character and
+word counts on every run.
 
 ## Files
 
